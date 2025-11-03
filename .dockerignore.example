@@ -1,0 +1,47 @@
+# Build directories
+build/
+deps/build/
+.build/
+cmake-build-*/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+*.log
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Test files
+tests/
+*.test
+
+# Temporary files
+*.tmp
+*.bak
+*.cache
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+
+# Node modules
+node_modules/
+resources/web/**/node_modules/
+
+# Keep only what's needed for build
+!src/
+!resources/
+!deps/
+!CMakeLists.txt
+!version.inc

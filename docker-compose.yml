@@ -1,0 +1,56 @@
+# Docker Compose examples for Bambu Studio headless slicing
+#
+# Usage:
+#   docker-compose run --rm slicer-osmesa --slice --load config/printer.ini --output output/model.gcode models/model.3mf
+#   docker-compose run --rm slicer-xvfb --slice --load config/printer.ini --output output/model.gcode models/model.3mf
+
+version: '3.8'
+
+services:
+  # OSMesa version - Recommended for production
+  slicer-osmesa:
+    build:
+      context: .
+      dockerfile: Dockerfile.osmesa
+    image: bambu-slicer:osmesa
+    volumes:
+      - ./models:/workspace/models:ro
+      - ./output:/workspace/output
+      - ./config:/workspace/config:ro
+    working_dir: /workspace
+    restart: "no"
+    mem_limit: 4g
+    cpus: "4"
+    environment:
+      - SLIC3R_RESOURCESDIR=/usr/local/share/bambustudio/resources
+
+  # Xvfb version - Good for testing with official binaries
+  slicer-xvfb:
+    build:
+      context: .
+      dockerfile: Dockerfile.xvfb
+    image: bambu-slicer:xvfb
+    volumes:
+      - ./models:/workspace/models:ro
+      - ./output:/workspace/output
+      - ./config:/workspace/config:ro
+    working_dir: /workspace
+    restart: "no"
+    mem_limit: 4g
+    cpus: "4"
+    # Xvfb needs shared memory
+    shm_size: 256mb
+
+  # Batch processing service example
+  batch-slicer:
+    image: bambu-slicer:osmesa
+    volumes:
+      - ./models:/workspace/models:ro
+      - ./output:/workspace/output
+      - ./config:/workspace/config:ro
+      - ./scripts:/workspace/scripts:ro
+    working_dir: /workspace
+    command: /workspace/scripts/batch-slice.sh
+    restart: "no"
+    mem_limit: 4g
+    cpus: "4"

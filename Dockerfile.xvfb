@@ -1,0 +1,73 @@
+# syntax=docker/dockerfile:1
+# Bambu Studio with Xvfb for headless rendering
+# Works with official binaries - good for quick testing
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+LABEL maintainer="Bambu Studio Community" \
+      description="Bambu Studio headless slicer with Xvfb (official binaries)" \
+      version="1.0"
+
+# Install Xvfb and dependencies
+RUN apt-get update && apt-get install -y \
+    xvfb \
+    mesa-utils \
+    libgl1-mesa-dri \
+    libgl1-mesa-glx \
+    libglu1-mesa \
+    wget \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and install official Bambu Studio
+# Note: Update version and URL as needed
+ARG BAMBU_VERSION=latest
+ARG BAMBU_URL=https://github.com/bambulab/BambuStudio/releases/latest/download/bambu-studio-linux.deb
+
+# If you have a local .deb file, comment out wget and use COPY instead:
+# COPY bambu-studio.deb /tmp/bambu-studio.deb
+RUN wget -O /tmp/bambu-studio.deb "${BAMBU_URL}" && \
+    apt-get update && \
+    apt-get install -y /tmp/bambu-studio.deb && \
+    rm /tmp/bambu-studio.deb && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create wrapper script that uses xvfb-run
+RUN echo '#!/bin/bash\n\
+set -e\n\
+# Start Xvfb in background if not already running\n\
+if ! pgrep Xvfb > /dev/null; then\n\
+    Xvfb :99 -screen 0 1024x768x24 -ac &\n\
+    XVFB_PID=$!\n\
+    export DISPLAY=:99\n\
+    sleep 2\n\
+    trap "kill $XVFB_PID 2>/dev/null || true" EXIT\n\
+fi\n\
+\n\
+# Run bambu-studio-console with all arguments\n\
+exec /usr/bin/bambu-studio-console "$@"\n\
+' > /usr/local/bin/slice && \
+    chmod +x /usr/local/bin/slice
+
+# Alternative: Simple xvfb-run wrapper (uncomment to use this instead)
+# RUN echo '#!/bin/bash\nexec xvfb-run -a --server-args="-screen 0 1024x768x24" bambu-studio-console "$@"' > /usr/local/bin/slice && \
+#     chmod +x /usr/local/bin/slice
+
+# Create non-root user
+RUN useradd -m -u 1000 slicer && \
+    mkdir -p /workspace /tmp/.X11-unix && \
+    chown slicer:slicer /workspace && \
+    chmod 1777 /tmp/.X11-unix
+
+USER slicer
+WORKDIR /workspace
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD [ -f /usr/bin/bambu-studio-console ] || exit 1
+
+# Use the wrapper script
+ENTRYPOINT ["/usr/local/bin/slice"]
+CMD ["--help"]

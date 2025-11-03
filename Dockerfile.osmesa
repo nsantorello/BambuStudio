@@ -1,0 +1,143 @@
+# syntax=docker/dockerfile:1
+# Bambu Studio with OSMesa for headless rendering
+# Recommended for production Docker deployments
+
+# ============================================
+# Stage 1: Build Dependencies
+# ============================================
+FROM ubuntu:22.04 AS deps-builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies for deps
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    wget \
+    libboost-all-dev \
+    libcurl4-openssl-dev \
+    libosmesa6-dev \
+    mesa-common-dev \
+    libgl1-mesa-dev \
+    libglu1-mesa-dev \
+    libeigen3-dev \
+    libpng-dev \
+    libjpeg-dev \
+    libtiff-dev \
+    libssl-dev \
+    libfreetype6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build dependencies
+COPY deps /app/bambustudio/deps
+WORKDIR /app/bambustudio/deps/build
+RUN cmake .. -DCMAKE_BUILD_TYPE=Release && \
+    make -j$(nproc) && \
+    echo "Dependencies built successfully"
+
+# ============================================
+# Stage 2: Build Bambu Studio
+# ============================================
+FROM ubuntu:22.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies for main app
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    pkg-config \
+    libosmesa6-dev \
+    mesa-common-dev \
+    libgl1-mesa-dev \
+    libglu1-mesa-dev \
+    libboost-all-dev \
+    libcurl4-openssl-dev \
+    libeigen3-dev \
+    libgtk-3-dev \
+    libglew-dev \
+    libpng-dev \
+    libjpeg-dev \
+    libtiff-dev \
+    libssl-dev \
+    libfreetype6-dev \
+    libtbb-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy dependencies from previous stage
+COPY --from=deps-builder /app/bambustudio/deps /app/bambustudio/deps
+
+# Copy source code
+COPY src /app/bambustudio/src
+COPY resources /app/bambustudio/resources
+COPY version.inc /app/bambustudio/
+COPY CMakeLists.txt /app/bambustudio/
+
+# Build Bambu Studio
+WORKDIR /app/bambustudio/build
+RUN cmake .. \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_PREFIX_PATH=/app/bambustudio/deps/build/destdir/usr/local \
+    -DSLIC3R_STATIC=1 \
+    -DSLIC3R_GTK=3 && \
+    make -j$(nproc) && \
+    echo "Bambu Studio built successfully"
+
+# ============================================
+# Stage 3: Runtime Image (Minimal)
+# ============================================
+FROM ubuntu:22.04 AS runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+LABEL maintainer="Bambu Studio Community" \
+      description="Bambu Studio headless slicer with OSMesa (no X11 required)" \
+      version="1.0"
+
+# Install only runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libosmesa6 \
+    libgl1-mesa-glx \
+    libglu1-mesa \
+    libboost-filesystem1.74.0 \
+    libboost-thread1.74.0 \
+    libboost-log1.74.0 \
+    libboost-locale1.74.0 \
+    libboost-regex1.74.0 \
+    libcurl4 \
+    libgtk-3-0 \
+    libglew2.2 \
+    libpng16-16 \
+    libjpeg-turbo8 \
+    libtiff5 \
+    libgomp1 \
+    libtbb2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy built binaries
+COPY --from=builder /app/bambustudio/build/src/bambu-studio /usr/local/bin/bambu-studio
+COPY --from=builder /app/bambustudio/build/src/bambu-studio-console /usr/local/bin/bambu-studio-console
+
+# Copy resources
+COPY --from=builder /app/bambustudio/resources /usr/local/share/bambustudio/resources
+
+# Set up environment
+ENV SLIC3R_RESOURCESDIR=/usr/local/share/bambustudio/resources
+
+# Create non-root user
+RUN useradd -m -u 1000 slicer && \
+    mkdir -p /workspace && \
+    chown slicer:slicer /workspace
+
+USER slicer
+WORKDIR /workspace
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD [ -f /usr/local/bin/bambu-studio-console ] || exit 1
+
+# Default to showing help
+ENTRYPOINT ["/usr/local/bin/bambu-studio-console"]
+CMD ["--help"]
