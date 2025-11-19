@@ -1327,16 +1327,27 @@ int CLI::run(int argc, char **argv)
     save_main_thread_id();
 
 #ifdef __WXGTK__
-    // On Linux, wxGTK has no support for Wayland, and the app crashes on
-    // startup if gtk3 is used. This env var has to be set explicitly to
-    // instruct the window manager to fall back to X server mode.
-    ::setenv("GDK_BACKEND", "x11", /* replace */ true);
+    // Check if we have a display server available (X11 or Wayland)
+    // If not, we're likely in headless/CLI mode and should skip GTK/X11 initialization
+    const char *display = boost::nowide::getenv("DISPLAY");
+    const char *wayland_display = boost::nowide::getenv("WAYLAND_DISPLAY");
+    bool has_display = (display && *display) || (wayland_display && *wayland_display);
 
-    ::setenv("WEBKIT_DISABLE_COMPOSITING_MODE", "1", /* replace */ false);
+    if (has_display) {
+        // On Linux, wxGTK has no support for Wayland, and the app crashes on
+        // startup if gtk3 is used. This env var has to be set explicitly to
+        // instruct the window manager to fall back to X server mode.
+        ::setenv("GDK_BACKEND", "x11", /* replace */ true);
 
-    // Also on Linux, we need to tell Xlib that we will be using threads,
-    // lest we crash when we fire up GStreamer.
-    XInitThreads();
+        ::setenv("WEBKIT_DISABLE_COMPOSITING_MODE", "1", /* replace */ false);
+
+        // Also on Linux, we need to tell Xlib that we will be using threads,
+        // lest we crash when we fire up GStreamer.
+        XInitThreads();
+        BOOST_LOG_TRIVIAL(info) << "Display detected, initialized X11/GTK for GUI mode";
+    } else {
+        BOOST_LOG_TRIVIAL(info) << "No display detected (headless mode), skipping X11/GTK initialization";
+    }
 #endif
 
 	// Switch boost::filesystem to utf8.
@@ -5758,6 +5769,14 @@ int CLI::run(int argc, char **argv)
             size_t color_idx = &color - &f_colors.front();
             colors_out[color_idx] = { float(rgb_color[0]) / 255.f, float(rgb_color[1]) / 255.f, float(rgb_color[2]) / 255.f, float(rgb_color[3]) / 255.f };
         }
+
+#ifdef __linux__
+        // Force software rendering for headless environments (CLI mode on servers without GPU/display)
+        // This allows thumbnail generation without X11/Wayland display server
+        ::setenv("LIBGL_ALWAYS_SOFTWARE", "1", /* replace */ false);
+        ::setenv("GALLIUM_DRIVER", "llvmpipe", /* replace */ false);
+        BOOST_LOG_TRIVIAL(info) << "Headless mode: enabled software rendering (OSMesa/LLVMpipe)";
+#endif
 
         int gl_major, gl_minor, gl_verbos;
         glfwGetVersion(&gl_major, &gl_minor, &gl_verbos);
