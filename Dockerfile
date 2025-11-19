@@ -33,6 +33,9 @@ RUN apt-get update && apt-get install  -y \
     libgtk-3-dev \
     libgtk-3-dev \
     libosmesa6-dev \
+    libosmesa6 \
+    libgl1-mesa-dri \
+    mesa-utils \
     libsecret-1-dev \
     libsoup2.4-dev \
     libssl3 \
