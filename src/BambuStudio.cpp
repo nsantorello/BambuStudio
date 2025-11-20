@@ -1327,26 +1327,26 @@ int CLI::run(int argc, char **argv)
     save_main_thread_id();
 
 #ifdef __WXGTK__
-    // Check if we have a display server available (X11 or Wayland)
-    // If not, we're likely in headless/CLI mode and should skip GTK/X11 initialization
+    // On Linux, wxGTK has no support for Wayland, and the app crashes on
+    // startup if gtk3 is used. This env var has to be set explicitly to
+    // instruct the window manager to fall back to X server mode.
+    // This must be set even in headless/CLI mode to prevent GLFW from attempting Wayland.
+    ::setenv("GDK_BACKEND", "x11", /* replace */ true);
+
+    ::setenv("WEBKIT_DISABLE_COMPOSITING_MODE", "1", /* replace */ false);
+
+    // Check if we have a display server available for XInitThreads
     const char *display = boost::nowide::getenv("DISPLAY");
     const char *wayland_display = boost::nowide::getenv("WAYLAND_DISPLAY");
     bool has_display = (display && *display) || (wayland_display && *wayland_display);
 
     if (has_display) {
-        // On Linux, wxGTK has no support for Wayland, and the app crashes on
-        // startup if gtk3 is used. This env var has to be set explicitly to
-        // instruct the window manager to fall back to X server mode.
-        ::setenv("GDK_BACKEND", "x11", /* replace */ true);
-
-        ::setenv("WEBKIT_DISABLE_COMPOSITING_MODE", "1", /* replace */ false);
-
         // Also on Linux, we need to tell Xlib that we will be using threads,
         // lest we crash when we fire up GStreamer.
         XInitThreads();
         BOOST_LOG_TRIVIAL(info) << "Display detected, initialized X11/GTK for GUI mode";
     } else {
-        BOOST_LOG_TRIVIAL(info) << "No display detected (headless mode), skipping X11/GTK initialization";
+        BOOST_LOG_TRIVIAL(info) << "No display detected (headless mode), GDK_BACKEND set to x11";
     }
 #endif
 
