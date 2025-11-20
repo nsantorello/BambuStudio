@@ -84,4 +84,5 @@ export MESA_GL_VERSION_OVERRIDE=3.3
 
 # Using su $USER -c will retain all the important ENV args when Bamboo Studio starts in a different shell
 # Continue with Bambu Studio using correct user, passing all arguments
-exec su "$EXEC_USER" -c "/BambuStudio/build/package/bin/bambu-studio $*"
+# Use xvfb-run to provide virtual display for GLFW initialization, then use software rendering
+exec su "$EXEC_USER" -c "xvfb-run -a /BambuStudio/build/package/bin/bambu-studio $*"
