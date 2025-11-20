@@ -5783,6 +5783,14 @@ int CLI::run(int argc, char **argv)
         BOOST_LOG_TRIVIAL(info) << boost::format("opengl version %1%.%2%.%3%")%gl_major %gl_minor %gl_verbos;
 
         glfwSetErrorCallback(glfw_callback);
+
+#ifdef __linux__
+        // Force GLFW to use X11 platform instead of Wayland before initializing
+        // This must be called before glfwInit() to prevent Wayland connection attempts
+        glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+        BOOST_LOG_TRIVIAL(info) << "Set GLFW platform to X11";
+#endif
+
         int ret = glfwInit();
         if (ret == GLFW_FALSE) {
             int code = glfwGetError(NULL);
