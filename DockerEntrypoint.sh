@@ -76,6 +76,12 @@ if [ ! -d "$HOME/.config" ]; then
     mkdir -p "$HOME/.config"
 fi
 
+# Set environment variables for headless rendering (OSMesa/LLVMpipe software rendering)
+# These allow thumbnail generation without GPU or display server
+export LIBGL_ALWAYS_SOFTWARE=1
+export GALLIUM_DRIVER=llvmpipe
+export MESA_GL_VERSION_OVERRIDE=3.3
+
 # Using su $USER -c will retain all the important ENV args when Bamboo Studio starts in a different shell
 # Continue with Bambu Studio using correct user, passing all arguments
 exec su "$EXEC_USER" -c "/BambuStudio/build/package/bin/bambu-studio $*"
