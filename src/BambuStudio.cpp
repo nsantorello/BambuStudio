@@ -5785,10 +5785,15 @@ int CLI::run(int argc, char **argv)
         glfwSetErrorCallback(glfw_callback);
 
 #ifdef __linux__
-        // Force GLFW to use X11 platform instead of Wayland before initializing
-        // This must be called before glfwInit() to prevent Wayland connection attempts
-        glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
-        BOOST_LOG_TRIVIAL(info) << "Set GLFW platform to X11";
+        // For truly headless rendering with OSMesa, try NULL platform first (GLFW 3.4+)
+        // If not available, fall back to X11 platform (requires Xvfb)
+        #ifdef GLFW_PLATFORM_NULL
+            glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_NULL);
+            BOOST_LOG_TRIVIAL(info) << "Set GLFW platform to NULL for headless OSMesa rendering";
+        #else
+            glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+            BOOST_LOG_TRIVIAL(info) << "Set GLFW platform to X11 (GLFW_PLATFORM_NULL not available)";
+        #endif
 #endif
 
         int ret = glfwInit();
