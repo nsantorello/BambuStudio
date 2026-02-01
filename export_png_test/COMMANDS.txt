@@ -1,0 +1,121 @@
+# 3MF to PNG Export Test Results
+# ================================
+
+## Overview
+
+This directory contains test results for generating PNG thumbnails from 3MF files
+with different colors applied. This is useful for showing what colors are currently
+printing on a printer by rendering realistic thumbnails.
+
+## BambuStudio --export-png Investigation
+
+The BambuStudio CLI has an --export-png flag that should generate PNG thumbnails.
+However, testing revealed that the AppImage releases are compiled with Wayland-only
+GLFW, making them incompatible with headless X11/Xvfb environments.
+
+### Attempted commands (did not work due to GLFW Wayland compilation):
+
+```bash
+# Basic export-png command (BambuStudio CLI)
+./bambu-studio --export-png 0 sample_flowrate.3mf
+
+# With debug output
+./bambu-studio --debug 5 --export-png 0 sample_flowrate.3mf
+
+# With custom output directory
+./bambu-studio --export-png 1 --outputdir ./output sample.3mf
+
+# With camera view options (0=iso, 1=top_front, 2=left, 3=right)
+./bambu-studio --export-png 1 --camera-view 0 sample.3mf
+```
+
+### BambuStudio --export-png parameters:
+
+- `--export-png <n>`: Export PNG of plate n (0 for all plates)
+- `--camera-view <n>`: Camera angle (0=iso, 1=top_front, 2=left, 3=right, etc.)
+- `--outputdir <path>`: Output directory for generated files
+- `--filament-colour`: Specify filament colors
+
+## Alternative Solution: Python Renderer
+
+Since the BambuStudio AppImage requires a Wayland compositor with OpenGL support
+(which isn't available in typical CI/headless environments), we created a Python
+script that uses trimesh for software rendering.
+
+### Python renderer usage:
+
+```bash
+# Basic rendering with default green color
+python3 render_3mf.py sample_flowrate.3mf -o output.png
+
+# With custom color (hex format)
+python3 render_3mf.py sample_flowrate.3mf -o red.png -c "#FF0000"
+
+# With different camera angles (iso, top, front, left, right)
+python3 render_3mf.py sample_flowrate.3mf -o top_view.png -a top
+
+# Custom resolution
+python3 render_3mf.py sample_flowrate.3mf -o output.png -w 1024 -H 1024
+
+# Multiple colors for multi-material models
+python3 render_3mf.py model.3mf -o output.png -c "#FF0000" "#00FF00" "#0000FF"
+```
+
+## Generated PNG Examples
+
+All images are 512x512 pixels unless otherwise noted.
+
+### Flowrate test model (sample_flowrate.3mf):
+
+| File | Color | Command |
+|------|-------|---------|
+| flowrate_green.png | Bambu Green (#00AE42) | `python3 render_3mf.py sample_flowrate.3mf -o flowrate_green.png -c "#00AE42"` |
+| flowrate_red.png | Red (#FF0000) | `python3 render_3mf.py sample_flowrate.3mf -o flowrate_red.png -c "#FF0000"` |
+| flowrate_blue.png | Blue (#0066FF) | `python3 render_3mf.py sample_flowrate.3mf -o flowrate_blue.png -c "#0066FF"` |
+| flowrate_orange.png | Orange (#FF6600) | `python3 render_3mf.py sample_flowrate.3mf -o flowrate_orange.png -c "#FF6600"` |
+| flowrate_purple.png | Purple (#9933FF) | `python3 render_3mf.py sample_flowrate.3mf -o flowrate_purple.png -c "#9933FF"` |
+| flowrate_white.png | White (#FFFFFF) | `python3 render_3mf.py sample_flowrate.3mf -o flowrate_white.png -c "#FFFFFF"` |
+| flowrate_black.png | Black (#333333) | `python3 render_3mf.py sample_flowrate.3mf -o flowrate_black.png -c "#333333"` |
+| flowrate_top.png | Green, top view | `python3 render_3mf.py sample_flowrate.3mf -o flowrate_top.png -a top -c "#00AE42"` |
+| flowrate_front.png | Green, front view | `python3 render_3mf.py sample_flowrate.3mf -o flowrate_front.png -a front -c "#00AE42"` |
+
+### PA pattern model (sample_pa_pattern.3mf):
+
+| File | Color | Command |
+|------|-------|---------|
+| pa_pattern_green.png | Bambu Green (#00AE42) | `python3 render_3mf.py sample_pa_pattern.3mf -o pa_pattern_green.png -c "#00AE42"` |
+| pa_pattern_red.png | Red (#FF0000) | `python3 render_3mf.py sample_pa_pattern.3mf -o pa_pattern_red.png -c "#FF0000"` |
+| pa_pattern_blue.png | Blue (#0066FF) | `python3 render_3mf.py sample_pa_pattern.3mf -o pa_pattern_blue.png -c "#0066FF"` |
+
+## Use Case: Showing Current Print Colors
+
+To generate thumbnails showing what colors are currently loaded on a printer:
+
+```bash
+# Get current printer filament colors (example: AMS slots)
+SLOT1_COLOR="#FF0000"  # Red in slot 1
+SLOT2_COLOR="#00FF00"  # Green in slot 2
+SLOT3_COLOR="#0000FF"  # Blue in slot 3
+SLOT4_COLOR="#FFFF00"  # Yellow in slot 4
+
+# Render model with the first filament color
+python3 render_3mf.py model.3mf -o thumbnail.png -c "$SLOT1_COLOR"
+
+# For multi-material models, assign colors to different parts
+python3 render_3mf.py multicolor_model.3mf -o thumbnail.png \
+    -c "$SLOT1_COLOR" "$SLOT2_COLOR" "$SLOT3_COLOR" "$SLOT4_COLOR"
+```
+
+## Dependencies
+
+```bash
+# Install Python dependencies
+pip3 install trimesh pillow numpy networkx lxml
+```
+
+## Notes
+
+1. The Python renderer uses simple orthographic projection with diffuse shading
+2. 3MF files are ZIP archives containing XML model definitions and mesh data
+3. The renderer supports hex colors with or without alpha (e.g., #FF0000 or #FF0000FF)
+4. Camera angles: iso (isometric), top, front, left, right
