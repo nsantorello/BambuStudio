@@ -397,6 +397,147 @@ def create_ortho_matrix(left: float, right: float, bottom: float, top: float,
     return proj
 
 
+def rasterize_triangle(v0, v1, v2, color, image, zbuffer, width, height):
+    """Rasterize a single triangle using scanline algorithm."""
+    # Compute bounding box
+    min_x = max(0, int(min(v0[0], v1[0], v2[0])))
+    max_x = min(width - 1, int(max(v0[0], v1[0], v2[0])))
+    min_y = max(0, int(min(v0[1], v1[1], v2[1])))
+    max_y = min(height - 1, int(max(v0[1], v1[1], v2[1])))
+
+    if min_x > max_x or min_y > max_y:
+        return
+
+    # Compute edge vectors for barycentric coordinates
+    v0v1 = v1[:2] - v0[:2]
+    v0v2 = v2[:2] - v0[:2]
+    denom = v0v1[0] * v0v2[1] - v0v1[1] * v0v2[0]
+
+    if abs(denom) < 1e-10:
+        return  # Degenerate triangle
+
+    inv_denom = 1.0 / denom
+
+    for y in range(min_y, max_y + 1):
+        for x in range(min_x, max_x + 1):
+            # Compute barycentric coordinates
+            v0p = np.array([x - v0[0], y - v0[1]])
+            u = (v0p[0] * v0v2[1] - v0p[1] * v0v2[0]) * inv_denom
+            v = (v0v1[0] * v0p[1] - v0v1[1] * v0p[0]) * inv_denom
+
+            if u >= 0 and v >= 0 and (u + v) <= 1:
+                # Interpolate z
+                z = v0[2] * (1 - u - v) + v1[2] * u + v2[2] * v
+
+                # Z-buffer test
+                if z > zbuffer[y, x]:
+                    zbuffer[y, x] = z
+                    image[y, x] = color
+
+
+def render_thumbnail_numpy(mesh: trimesh.Trimesh,
+                           width: int = 512,
+                           height: int = 512,
+                           view: str = ViewAngles.ISO,
+                           color: Optional[np.ndarray] = None,
+                           background: Optional[Tuple[int, int, int, int]] = None,
+                           transparent: bool = True) -> Image.Image:
+    """
+    Render a thumbnail using pure numpy software rasterization.
+    No OpenGL or external rendering libraries required.
+    """
+    if color is None:
+        color = DEFAULT_COLOR.copy()
+
+    # Get camera setup
+    bounds = mesh.bounds
+    camera_pos, target = get_camera_transform(view, bounds)
+    center = (bounds[0] + bounds[1]) / 2
+    size = bounds[1] - bounds[0]
+    max_dim = np.max(size)
+
+    # Create view matrix
+    view_matrix = create_view_matrix(camera_pos, target)
+
+    # Create orthographic projection
+    scale = max_dim * 0.6
+    aspect = width / height
+    proj_matrix = create_ortho_matrix(-scale * aspect, scale * aspect,
+                                       -scale, scale,
+                                       -max_dim * 5, max_dim * 5)
+
+    # Combined MVP matrix
+    mvp = proj_matrix @ view_matrix
+
+    # Transform vertices
+    vertices = mesh.vertices
+    ones = np.ones((len(vertices), 1))
+    vertices_h = np.hstack([vertices, ones])
+    transformed = (mvp @ vertices_h.T).T
+
+    # Perspective divide (for ortho, w=1)
+    w = transformed[:, 3:4]
+    w[w == 0] = 1
+    ndc = transformed[:, :3] / w
+
+    # Convert to screen coordinates
+    screen_x = (ndc[:, 0] + 1) * 0.5 * width
+    screen_y = (1 - ndc[:, 1]) * 0.5 * height  # Flip Y
+    screen_z = ndc[:, 2]
+
+    screen_coords = np.column_stack([screen_x, screen_y, screen_z])
+
+    # Compute face normals in view space for lighting
+    if mesh.face_normals is None or len(mesh.face_normals) == 0:
+        mesh.fix_normals()
+
+    face_normals = mesh.face_normals
+    face_colors = compute_lighting(face_normals, view_matrix, color)
+
+    # Initialize buffers
+    if transparent and background is None:
+        image = np.zeros((height, width, 4), dtype=np.uint8)
+    else:
+        bg = background if background else (255, 255, 255, 255)
+        image = np.full((height, width, 4), bg, dtype=np.uint8)
+
+    zbuffer = np.full((height, width), -np.inf)
+
+    # Get faces sorted by depth (painter's algorithm backup)
+    faces = mesh.faces
+    face_centers = mesh.vertices[faces].mean(axis=1)
+    face_centers_h = np.hstack([face_centers, np.ones((len(face_centers), 1))])
+    face_depths = (view_matrix @ face_centers_h.T)[2, :]
+    sorted_indices = np.argsort(face_depths)
+
+    # Rasterize each triangle
+    print(f"Rasterizing {len(faces)} triangles...", file=sys.stderr)
+    for i, face_idx in enumerate(sorted_indices):
+        if i % 10000 == 0:
+            print(f"  Progress: {i}/{len(faces)} ({100*i/len(faces):.1f}%)", file=sys.stderr)
+
+        face = faces[face_idx]
+        v0 = screen_coords[face[0]]
+        v1 = screen_coords[face[1]]
+        v2 = screen_coords[face[2]]
+
+        # Back-face culling (screen Y is flipped, so sign is reversed)
+        edge1 = v1[:2] - v0[:2]
+        edge2 = v2[:2] - v0[:2]
+        cross = edge1[0] * edge2[1] - edge1[1] * edge2[0]
+        if cross > 0:  # Back-facing in screen space (Y is flipped)
+            continue
+
+        # Get face color
+        fc = face_colors[face_idx]
+        fc_int = (np.clip(fc, 0, 1) * 255).astype(np.uint8)
+
+        rasterize_triangle(v0, v1, v2, fc_int, image, zbuffer, width, height)
+
+    print(f"  Progress: {len(faces)}/{len(faces)} (100.0%)", file=sys.stderr)
+    return Image.fromarray(image)
+
+
 def render_thumbnail_software(mesh: trimesh.Trimesh,
                               width: int = 512,
                               height: int = 512,
@@ -405,8 +546,8 @@ def render_thumbnail_software(mesh: trimesh.Trimesh,
                               background: Optional[Tuple[int, int, int, int]] = None,
                               transparent: bool = True) -> Image.Image:
     """
-    Render a thumbnail using pure software rasterization.
-    This is a fallback when pyrender/osmesa is not available.
+    Render a thumbnail using software rasterization.
+    Tries trimesh's renderer first, falls back to pure numpy.
     """
     if color is None:
         color = DEFAULT_COLOR.copy()
@@ -471,8 +612,10 @@ def render_thumbnail_software(mesh: trimesh.Trimesh,
 
     except Exception as e:
         print(f"Trimesh rendering failed: {e}", file=sys.stderr)
-        # Fall through to manual rendering
-        raise
+        print("Falling back to numpy rasterizer...", file=sys.stderr)
+        # Fall back to pure numpy rasterizer
+        return render_thumbnail_numpy(mesh, width, height, view, color,
+                                       background, transparent)
 
 
 def render_thumbnail_pyrender(mesh: trimesh.Trimesh,

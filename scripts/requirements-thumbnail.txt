@@ -5,11 +5,18 @@
 numpy>=1.20.0
 trimesh>=3.10.0
 Pillow>=8.0.0
+scipy>=1.7.0
 
-# For higher quality rendering with OSMesa (recommended)
+# For 3MF file support (recommended)
+networkx>=2.6.0
+lxml>=4.6.0
+
+# For higher quality rendering with OSMesa (optional, recommended)
 # These enable hardware-quality rendering in headless environments
-pyrender>=0.1.45
-PyOpenGL>=3.1.5
+# Note: May require system dependencies (see below)
+# pyrender>=0.1.45
+# PyOpenGL>=3.1.5
+# pyglet<2
 
 # System dependencies for OSMesa (install separately):
 # Ubuntu/Debian: sudo apt-get install libosmesa6-dev mesa-utils
@@ -24,6 +31,3 @@ PyOpenGL>=3.1.5
 #
 # Option 2: OCP (more lightweight)
 # OCP>=7.7.0
-
-# Alternative STEP support via gmsh (optional)
-# gmsh>=4.10.0
