@@ -31,3 +31,8 @@ doc/
 test.js
 /.cache/
 .clangd
+
+# Python bytecode cache
+__pycache__/
+*.pyc
+*.pyo
