@@ -1577,9 +1577,14 @@ int CLI::run(int argc, char **argv)
         if (!pipe_name.empty()) {
             BOOST_LOG_TRIVIAL(info) << boost::format("Will use pipe %1%")%pipe_name;
 #if defined(__linux__) || defined(__LINUX__)
-            g_cli_callback_mgr.start(pipe_name);
-            PrintBase::SlicingStatus slicing_status{1, "Start to load files"};
-            cli_status_callback(slicing_status);
+            if (!g_cli_callback_mgr.start(pipe_name)) {
+                BOOST_LOG_TRIVIAL(error) << boost::format("Failed to start CLI callback manager with pipe %1%. "
+                    "Progress notifications will not be sent.")%pipe_name;
+            }
+            else {
+                PrintBase::SlicingStatus slicing_status{1, "Start to load files"};
+                cli_status_callback(slicing_status);
+            }
 #endif
         }
     }
@@ -5965,7 +5970,9 @@ int CLI::run(int argc, char **argv)
             }
         } else if (opt_key == "slice") {
             //BBS: slice 0 means all plates, i means plate i;
-            plate_to_slice = m_config.option<ConfigOptionInt>("slice")->value;
+            //Use the already-validated plate_to_slice (which was reset to 0 for
+            //non-BBL 3MF files at load time) instead of re-reading from config,
+            //to avoid bypassing the non-BBL safety check.
             sliced_plate = plate_to_slice;
             bool pre_check = (plate_to_slice == 0)?true:false;
             bool finished = false;
