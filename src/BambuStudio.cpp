@@ -2066,7 +2066,7 @@ int CLI::run(int argc, char **argv)
             if (from_iter != key_values.end()) {
                 config_from = from_iter->second;
             }
-            if ((config_from != "system")&&(config_from != "User")&&(config_from != "user")) {
+            if ((config_from != "system")&&(config_from != "User")&&(config_from != "user")&&(config_from != "project")) {
                 boost::nowide::cerr <<__FUNCTION__ << boost::format(":file %1%'s from %2% unsupported") % file % config_from;
                 return CLI_CONFIG_FILE_ERROR;
             }

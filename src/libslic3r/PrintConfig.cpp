@@ -8053,11 +8053,15 @@ std::map<std::string, std::string> validate(const FullPrintConfig &cfg, bool und
         }
         case coFloats:
         case coPercents:
-            for (double v : static_cast<const ConfigOptionVector<double>*>(opt)->values)
+            for (size_t i = 0; i < static_cast<const ConfigOptionVector<double>*>(opt)->values.size(); ++i) {
+                double v = static_cast<const ConfigOptionVector<double>*>(opt)->values[i];
+                if (optdef->nullable && opt->is_nil(i))
+                    continue;
                 if (v < optdef->min || v > optdef->max) {
                     out_of_range = true;
                     break;
                 }
+            }
             break;
         case coInt:
         {
@@ -8066,11 +8070,15 @@ std::map<std::string, std::string> validate(const FullPrintConfig &cfg, bool und
             break;
         }
         case coInts:
-            for (int v : static_cast<const ConfigOptionVector<int>*>(opt)->values)
+            for (size_t i = 0; i < static_cast<const ConfigOptionVector<int>*>(opt)->values.size(); ++i) {
+                int v = static_cast<const ConfigOptionVector<int>*>(opt)->values[i];
+                if (optdef->nullable && opt->is_nil(i))
+                    continue;
                 if (v < optdef->min || v > optdef->max) {
                     out_of_range = true;
                     break;
                 }
+            }
             break;
         default:;
         }
